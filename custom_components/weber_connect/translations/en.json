@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Weber Connect (Cloud)",
+        "description": "Enter your Weber companion credentials. {how}",
+        "data": {
+          "device_id": "Companion device ID",
+          "device_password": "Device password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Login failed — check the device ID and password.",
+      "cannot_connect": "Could not reach the Weber cloud. Try again.",
+      "no_appliances": "Login worked, but no grill is paired to this companion device. Pair the hub in the Weber app first.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This Weber companion device is already set up."
+    }
+  }
+}

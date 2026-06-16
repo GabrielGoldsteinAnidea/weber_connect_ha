@@ -1,0 +1,39 @@
+{
+  // Debugger configs for tools/validate.py — validates the weber_connect
+  // client against the live Weber cloud. Credentials come from env
+  // (WEBER_REFRESH_TOKEN / WEBER_CLIENT_ID / WEBER_CLIENT_SECRET) or
+  // secrets.local.json (resolved relative to cwd = workspace root).
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "validate: token (mint access token)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/validate.py",
+      "args": ["token"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "validate: discover (appliance/session/probes)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/validate.py",
+      "args": ["discover"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "validate: temps (probe temp time series)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/validate.py",
+      "args": ["temps"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}
