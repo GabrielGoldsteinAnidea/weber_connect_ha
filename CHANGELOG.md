@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.0.2] - 2026-06-17
+
+### Added
+- **Monitoring switch** (`switch.<hub>_monitoring`) — polling is now off by default
+  and gated behind this switch, so the cloud isn't polled 24/7.
+- **Auto-off duration** (`number.<hub>_auto_off`) — minutes the switch stays on before
+  it auto-disables (default 60, restored across restarts). On expiry the switch turns
+  itself off, polling stops, and probes disconnect.
+- **Connection** sensor (`sensor.<hub>_connection`) — hub-level data status:
+  `streaming` / `polling` / `stale` / `offline` / `off`, with `rest`/`websocket`
+  transport breakdown, session id, and last snapshot id as attributes.
+- Probe `status` enum gained a `connected` state (reading a temperature, doneness
+  unknown when the websocket isn't streaming).
+- Grill icon (`mdi:grill`) on entities, plus brand-tile assets under `brands/` for a
+  future home-assistant/brands PR.
+
+### Changed
+- Probe temperature and status entities are now **unavailable** unless the connection
+  is `streaming` or `polling` — they no longer show frozen/stale values when the hub
+  has paused its cloud push.
+- Connectivity is derived from the reliable REST temperature feed; the companion
+  websocket only refines a connected probe to `idle`/`cooking`/`done`.
+- Config-flow field labelled **"App Identifier"** to match the Weber app's Settings
+  screen.
+
 ## [0.0.1] - 2026-06-17
 
 First release. Cloud-polling Home Assistant integration for the Weber Connect Smart
@@ -31,4 +56,5 @@ Grilling Hub, built clean-room from decrypted app traffic.
 - Cloud data flows only while the hub is maintaining a walker-cloud session
   (typically during an active cook); see `docs/` for the reverse-engineering notes.
 
+[0.0.2]: https://github.com/GabrielGoldsteinAnidea/weber_connect_ha/releases/tag/v0.0.2
 [0.0.1]: https://github.com/GabrielGoldsteinAnidea/weber_connect_ha/releases/tag/v0.0.1

@@ -239,3 +239,5 @@ monitor_state.json
 *.png
 # ...except documentation images that ship with the integration
 !custom_components/weber_connect/*.png
+# ...and the brand-tile assets for the home-assistant/brands repo
+!brands/**/*.png

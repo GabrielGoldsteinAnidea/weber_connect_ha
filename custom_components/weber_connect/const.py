@@ -18,3 +18,10 @@ DEFAULT_SCAN_INTERVAL = 10  # seconds
 
 # Number of probe channels the hub supports.
 MAX_PROBES = 4
+
+# Monitoring is gated by a switch + auto-off timer (no reason to poll the cloud
+# 24/7). When the switch is turned on, polling runs for this many minutes, then
+# auto-disables. User-adjustable via the "Auto-off" number entity.
+DEFAULT_AUTO_OFF_MINUTES = 60
+MIN_AUTO_OFF_MINUTES = 1
+MAX_AUTO_OFF_MINUTES = 1440  # 24 h

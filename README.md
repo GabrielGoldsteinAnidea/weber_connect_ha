@@ -10,32 +10,80 @@ It was built clean-room from decrypted app traffic; the full wire protocol is in
 
 ## What you get
 
-For each of the hub's 4 probe channels, two entities:
+Per hub: a monitoring switch, an auto-off duration, a connection status, plus two
+entities per probe channel (×4):
 
 | Entity | Type | Values |
 |--------|------|--------|
+| `switch.<hub>_monitoring` | Switch | on / off — start/stop cloud polling |
+| `number.<hub>_auto_off` | Number (config) | minutes the switch stays on before auto-off (default 60) |
+| `sensor.<hub>_connection` | Enum (diagnostic) | `streaming` · `polling` · `stale` · `offline` · `off` |
 | `sensor.<hub>_probe_N` | Temperature | Live probe temperature (°C/°F per your HA unit setting) |
-| `sensor.<hub>_probe_N_status` | Enum (dropdown) | `disconnected` · `idle` · `cooking` · `done` · `unknown` |
+| `sensor.<hub>_probe_N_status` | Enum (dropdown) | `disconnected` · `connected` · `idle` · `cooking` · `done` |
+
+### Monitoring switch + auto-off
+
+There's no reason to hammer Weber's cloud 24/7, so polling is **off by default** and
+gated behind a switch:
+
+- Turn **`switch.<hub>_monitoring`** on → the integration starts polling and arms an
+  auto-off timer.
+- **`number.<hub>_auto_off`** sets how long it stays on (default **60 minutes**).
+- When the timer expires, the switch turns itself off, polling stops, and all probe
+  entities go unavailable. Turn it back on before your next cook.
+
+The switch exposes `minutes_remaining` as an attribute.
+
+### Connection status
+
+The **Connection** sensor reports the hub's overall data state — useful because the
+hub only pushes to Weber's cloud intermittently, and when it pauses, probe data stops:
+
+- **streaming** — companion websocket is delivering live frames (real-time doneness)
+- **polling** — REST cook-history returned new snapshots this cycle (temps advancing)
+- **stale** — a cook session exists but no new data arrived; the hub paused its push
+- **offline** — no active cook session (hub isn't pushing a cook to the cloud)
+- **off** — monitoring switch is off (not polling)
+
+Its attributes break out the `rest` and `websocket` transports separately, plus the
+session id and last snapshot id.
+
+> **Probe entities are only available while the connection is `streaming` or
+> `polling`** (live and accurate). In any other state — `stale`, `offline`, or
+> `off` — the probe temperature and status entities report *unavailable* rather than
+> showing a frozen/stale value.
 
 The temperature sensor goes *unavailable* when a probe is unplugged or reads zero.
 The **status** sensor is a text dropdown that always has a value:
 
-- **disconnected** — probe unplugged, or no active cook
+- **disconnected** — probe unplugged / not reading, or no active cook
+- **connected** — reading a temperature, but doneness is unknown (the companion
+  websocket isn't streaming, which is common — see below)
 - **idle** — plugged in, no target temperature set
 - **cooking** — below the target temperature
 - **done** — reached / exceeded the target
-- **unknown** — state not read yet (e.g. the phone app is holding the live channel)
+
+Connectivity (`disconnected` vs `connected`) is derived from the reliable REST
+temperature feed. The finer `idle`/`cooking`/`done` states require the companion
+websocket; if your hub doesn't stream over it, a reading probe simply shows
+`connected`.
 
 All entities are grouped under one **device** (your hub), with its name, model, and
 serial number pulled from the cloud.
 
 ## How it works
 
+- Polling only runs while the **monitoring switch** is on (with an auto-off timer);
+  it's off by default.
 - **Temperatures** come from the REST cook-history API (`/cook-history/.../snapshots`),
-  polled every 10 s. This is stateless, so it coexists fine with the phone app.
-- **Doneness / connection state** comes from the companion websocket. That channel
-  is single-holder — if the phone app is actively connected it may be contended, in
-  which case the integration keeps the last-known status instead of flapping.
+  polled every 10 s while monitoring is on. This is stateless, so it coexists fine
+  with the phone app.
+- **Connectivity** (`connected`/`disconnected`) is derived from whether a probe is
+  reporting a temperature in the REST feed — reliable and always available.
+- **Doneness** (`idle`/`cooking`/`done`) comes from the companion websocket, which
+  only *refines* a connected probe. That channel is single-holder and many hubs
+  don't maintain a cloud websocket session, so it's treated as best-effort: when it
+  isn't streaming, reading probes stay `connected`.
 
 ## Requirements
 

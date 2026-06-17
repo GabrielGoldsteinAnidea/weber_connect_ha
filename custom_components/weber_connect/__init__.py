@@ -10,7 +10,7 @@ from .api import WeberAuthError, WeberCloud, WeberError
 from .const import CONF_DEVICE_ID, CONF_DEVICE_PASSWORD, DOMAIN
 from .coordinator import WeberCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

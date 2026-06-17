@@ -5,7 +5,7 @@
         "title": "Weber Connect (Cloud)",
         "description": "Enter your Weber companion credentials. {how}",
         "data": {
-          "device_id": "Companion device ID",
+          "device_id": "App Identifier",
           "device_password": "Device password"
         }
       }

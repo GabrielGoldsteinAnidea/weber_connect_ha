@@ -57,8 +57,8 @@ class WeberConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_SCHEMA, errors=errors,
             description_placeholders={
-                "how": "In the Weber Connect app, pair your hub, then read the "
-                       "companion device_id and its device_password from a "
-                       "decrypted app capture (see the project docs).",
+                "how": "Find the App Identifier in the Weber Connect app under "
+                       "Settings. The Device password is not shown there — recover "
+                       "it from a decrypted app capture (see the project docs).",
             },
         )
