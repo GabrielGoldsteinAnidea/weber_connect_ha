@@ -49,14 +49,28 @@ serial number pulled from the cloud.
 This integration logs in as a **companion device** using two values that the Weber
 app stores after you pair the hub:
 
-- `device_id` — your companion device ID (a 16-hex-char string, e.g. `065d…`).
+- `device_id` — your companion device ID (a 32-hex-char string, e.g. `065d…`).
 - `device_password` — the matching device password.
 
-These are not shown in the app UI. You extract them once from a decrypted capture of
-the app's login traffic (the `POST /2/devices/register` call). The project tooling in
-[`tools/`](tools/) and the notes in [`docs/`](docs/) walk through capturing and
-decrypting that traffic (PCAPdroid + mitm on Android). Keep these private — the
-`device_password` is a real secret.
+### Where to find this in the app
+
+Open the Weber Connect app → **Settings**. The screen below shows the relevant fields:
+
+<p align="center">
+  <img src="custom_components/weber_connect/weber_hub_screen.png" alt="Weber Connect app Settings screen showing App Identifier, Nickname, Model, and Serial Number" width="300">
+</p>
+
+- **App Identifier** is your **`device_id`** — copy it straight from this screen (use
+  the copy icon next to it). No capture needed for this one.
+- **Serial Number** and **Model** are shown here too (the integration also reads these
+  from the cloud automatically, so you don't have to enter them — this is just where to
+  see/confirm them).
+
+The **`device_password`** is *not* shown in the app UI. You extract it once from a
+decrypted capture of the app's login traffic (the `POST /2/devices/register` call). The
+project tooling in [`tools/`](tools/) and the notes in [`docs/`](docs/) walk through
+capturing and decrypting that traffic (PCAPdroid + mitm on Android). Keep it private —
+the `device_password` is a real secret.
 
 > The OAuth `client_id` / `client_secret` are **app-global** values baked into the
 > Weber app (identical for every install, extracted from the APK), so they ship

@@ -237,3 +237,5 @@ monitor_state.json
 
 # phone screenshots captured via adb during debugging (diagnostic, not source)
 *.png
+# ...except documentation images that ship with the integration
+!custom_components/weber_connect/*.png
