@@ -5,9 +5,11 @@ the active session each cycle (handles new cooks), and pages forward by after_id
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -47,6 +49,12 @@ LIVE_STATES = (STREAMING, POLLING)
 # when REST is fresh (a burst is happening) — plus a periodic safety probe so we'd
 # still notice ws-only activity. Saves ~5 s on every idle poll.
 WS_PROBE_EVERY = 6
+
+# When debug logging is enabled, raw websocket frames (+ a raw snapshot sample) are
+# appended here under the HA config dir, for offline protocol decoding. Capped so it
+# can't grow without bound; delete the file to start a fresh capture.
+CAPTURE_FILE = "weber_connect_capture.jsonl"
+CAPTURE_MAX_BYTES = 20 * 1024 * 1024  # ~20 MB
 
 
 class WeberCoordinator(DataUpdateCoordinator):
@@ -142,6 +150,28 @@ class WeberCoordinator(DataUpdateCoordinator):
         except WeberError as e:
             raise UpdateFailed(str(e)) from e
 
+    def _capture_raw(self, frames: list | None, snaps: list) -> None:
+        """Append raw ws frames (+ one raw snapshot sample) to the capture file for
+        offline protocol decoding. Runs in the poll executor; debug-gated."""
+        try:
+            path = self.hass.config.path(CAPTURE_FILE)
+            if os.path.exists(path) and os.path.getsize(path) >= CAPTURE_MAX_BYTES:
+                return
+            ts = datetime.now(timezone.utc).isoformat()
+            lines = [
+                json.dumps({"ts": ts, "poll": self._poll_count, "kind": "ws_frame",
+                            "len": len(f), "hex": f.hex()})
+                for f in (frames or [])
+            ]
+            if snaps:  # one full raw snapshot per poll exposes any undecoded REST keys
+                lines.append(json.dumps({"ts": ts, "poll": self._poll_count,
+                                         "kind": "snapshot", "data": snaps[-1]}))
+            if lines:
+                with open(path, "a", encoding="utf-8") as fh:
+                    fh.write("\n".join(lines) + "\n")
+        except (OSError, TypeError, ValueError) as e:
+            _LOGGER.debug("raw capture write failed: %s", e)
+
     def _poll(self) -> dict:
         appliance_id = self.appliance["id"]
         self._poll_count += 1
@@ -187,18 +217,23 @@ class WeberCoordinator(DataUpdateCoordinator):
         # that is plainly reading a temperature as "disconnected".
         # only pay the ~5 s websocket read when a burst is happening (fresh REST) or
         # on a periodic safety probe; otherwise skip it so quiet polls are fast.
-        do_ws = fresh or (self._poll_count % WS_PROBE_EVERY == 0)
+        # In debug mode we always read AND capture raw frames for offline decode.
+        capturing = _LOGGER.isEnabledFor(logging.DEBUG)
+        do_ws = fresh or capturing or (self._poll_count % WS_PROBE_EVERY == 0)
         ws = None
         ws_seconds = 0.0
+        raw_frames: list | None = [] if capturing else None
         if do_ws:
             t_ws = time.time()
             try:
-                ws = self.api.companion_status(appliance_id, seconds=4.0)
+                ws = self.api.companion_status(appliance_id, seconds=4.0, raw_sink=raw_frames)
             except WeberError as e:
                 _LOGGER.debug("companion websocket unavailable: %s", e)
                 ws = None
             ws_seconds = time.time() - t_ws
         ws_ok = bool(ws)
+        if capturing:
+            self._capture_raw(raw_frames, snaps)
         states = {}
         for i in range(MAX_PROBES):
             if ws is not None and i in ws:

@@ -160,10 +160,15 @@ class WeberCloud:
     # (websocket helpers are module-level functions at the bottom of this file)
 
     # ----------------------------------------------------- websocket (doneness)
-    def companion_status(self, appliance_id: str, seconds: float = 5.0) -> dict | None:
+    def companion_status(self, appliance_id: str, seconds: float = 5.0,
+                         raw_sink: list | None = None) -> dict | None:
         """Open the companion websocket, subscribe, and read one status frame.
         Returns {probe_index: {"state": cooking/done/idle, "present": True}} or
-        None if the socket was contended/closed (phone app holding the session)."""
+        None if the socket was contended/closed (phone app holding the session).
+
+        If `raw_sink` (a list) is given, every received binary frame is appended to
+        it as raw bytes for offline protocol decoding, and the read runs the full
+        `seconds` window (no early break) to capture as many frames as possible."""
         token = self._token_value()
         key = base64.b64encode(os.urandom(16)).decode()
         req = (
@@ -212,8 +217,13 @@ class WeberCloud:
                         st = _parse_ws_status(p[41:])
                         if st:
                             probes = st
-                if probes:
+                # when capturing raw frames, read the whole window; else stop early
+                if probes and raw_sink is None:
                     break
+            if raw_sink is not None:
+                for op, p in _ws_frames(data):
+                    if op == 2 and len(p) > 43:
+                        raw_sink.append(bytes(p))
         finally:
             try:
                 s.close()

@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.0.4] - 2026-06-17
+
+### Added
+- **Raw protocol capture for offline decoding.** While debug logging is on
+  (`custom_components.weber_connect: debug`), every raw companion-websocket frame
+  plus one raw cook-history snapshot per poll is appended to
+  `config/weber_connect_capture.jsonl` (JSON lines: `{ts, poll, kind, len, hex}` /
+  `{…, "data": {snapshot}}`), capped at ~20 MB. In debug mode the websocket reads
+  the full window (no early break) to capture as many frames as possible.
+- HACS validation GitHub Action (`.github/workflows/validate.yml`), with the
+  `brands` check ignored until the integration is added to home-assistant/brands.
+- README "Debugging & protocol capture" section documenting the logger string and
+  the capture workflow.
+
 ## [0.0.3] - 2026-06-17
 
 ### Changed
@@ -73,6 +87,7 @@ Grilling Hub, built clean-room from decrypted app traffic.
 - Cloud data flows only while the hub is maintaining a walker-cloud session
   (typically during an active cook); see `docs/` for the reverse-engineering notes.
 
+[0.0.4]: https://github.com/GabrielGoldsteinAnidea/weber_connect_ha/releases/tag/v0.0.4
 [0.0.3]: https://github.com/GabrielGoldsteinAnidea/weber_connect_ha/releases/tag/v0.0.3
 [0.0.2]: https://github.com/GabrielGoldsteinAnidea/weber_connect_ha/releases/tag/v0.0.2
 [0.0.1]: https://github.com/GabrielGoldsteinAnidea/weber_connect_ha/releases/tag/v0.0.1

@@ -154,15 +154,51 @@ integration as in step 5 above.
 4. Plug a probe into hot water with a target set → status should move
    `idle → cooking → done`; unplug it → `disconnected`.
 
-If something looks off, enable debug logging:
+## Debugging & protocol capture
 
-```yaml
-# configuration.yaml
-logger:
-  default: warning
-  logs:
-    custom_components.weber_connect: debug
+If something looks off — or you want to help decode the parts of the Weber protocol
+that aren't understood yet — turn on debug logging for this integration. The logger
+name is:
+
 ```
+custom_components.weber_connect: debug
+```
+
+Set it either way:
+
+- **Live, no restart:** Developer Tools → Actions → `logger.set_level`, with
+  ```yaml
+  custom_components.weber_connect: debug
+  ```
+- **Persistent**, in `configuration.yaml` (then restart):
+  ```yaml
+  logger:
+    default: warning
+    logs:
+      custom_components.weber_connect: debug
+  ```
+
+With debug on you get two things:
+
+1. **Per-poll diagnostics** in the HA log — session, new-snapshot count, `after_id`,
+   whether a websocket frame arrived, per-transport ages, and timing. Good for
+   diagnosing the connection state (`streaming`/`polling`/`stale`).
+2. **Raw protocol capture** — every raw companion-websocket frame (plus one raw
+   cook-history snapshot per poll) is appended to
+   **`config/weber_connect_capture.jsonl`** as JSON lines, e.g.
+   ```json
+   {"ts": "...", "poll": 42, "kind": "ws_frame", "len": 209, "hex": "0810a042..."}
+   {"ts": "...", "poll": 42, "kind": "snapshot", "data": { ... }}
+   ```
+   This file is for **offline decoding** of the still-undefined fields (probe flag
+   bytes, the 8-byte target/counter field, device-info ints — see the protocol
+   notes). Send it along with a bug report, or decode it yourself. It's capped at
+   ~20 MB; delete it to start a fresh capture, and turn debug logging back off to
+   stop writing it.
+
+> Tip for a useful capture: enable debug, then exercise the probes — set a target,
+> let one reach "done", pull a probe out of range — so the unknown bytes change and
+> become decodable.
 
 ## Repo layout
 

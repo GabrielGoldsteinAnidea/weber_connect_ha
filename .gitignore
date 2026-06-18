@@ -234,6 +234,7 @@ last_run.json
 associated.json
 serial_details.json
 monitor_state.json
+weber_connect_capture.jsonl
 
 # phone screenshots captured via adb during debugging (diagnostic, not source)
 *.png
