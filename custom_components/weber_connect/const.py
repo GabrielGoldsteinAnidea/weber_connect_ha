@@ -25,3 +25,9 @@ MAX_PROBES = 4
 DEFAULT_AUTO_OFF_MINUTES = 60
 MIN_AUTO_OFF_MINUTES = 1
 MAX_AUTO_OFF_MINUTES = 1440  # 24 h
+
+# Both transports (REST snapshots, companion websocket) arrive in bursts, so a
+# single empty poll does NOT mean the connection dropped. We hold the last live
+# state for this grace window before declaring the connection stale (and dropping
+# the probes). Smooths the streaming/polling/stale flapping seen per-poll.
+STALE_GRACE_SECONDS = 60

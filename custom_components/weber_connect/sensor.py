@@ -152,4 +152,7 @@ class WeberConnectionSensor(CoordinatorEntity[WeberCoordinator], SensorEntity):
             "session": d.get("session"),
             "new_snapshots_last_poll": d.get("new_snapshots"),
             "last_snapshot_id": d.get("last_snapshot_id"),
+            "rest_age_seconds": d.get("rest_age_s"),
+            "websocket_age_seconds": d.get("ws_age_s"),
+            "last_poll_seconds": d.get("poll_seconds"),
         }

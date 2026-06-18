@@ -18,6 +18,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MAX_PROBES,
+    STALE_GRACE_SECONDS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +41,12 @@ OFF = "off"
 CONNECTION_OPTIONS = [STREAMING, POLLING, STALE, OFFLINE, OFF]
 # probes are shown only when the connection is genuinely live/accurate
 LIVE_STATES = (STREAMING, POLLING)
+
+# The companion websocket frame only ever arrives alongside a REST burst, and a
+# read with no frame blocks ~5 s. So skip the ws read on quiet polls and only do it
+# when REST is fresh (a burst is happening) — plus a periodic safety probe so we'd
+# still notice ws-only activity. Saves ~5 s on every idle poll.
+WS_PROBE_EVERY = 6
 
 
 class WeberCoordinator(DataUpdateCoordinator):
@@ -64,6 +71,10 @@ class WeberCoordinator(DataUpdateCoordinator):
         self._enabled = False
         self._auto_off_minutes = DEFAULT_AUTO_OFF_MINUTES
         self._expiry: float | None = None  # epoch seconds; auto-off deadline
+        # freshness tracking (epoch seconds of last observed data per transport)
+        self._last_rest_ts: float = 0.0
+        self._last_ws_ts: float = 0.0
+        self._poll_count = 0
 
     # ------------------------------------------------------------ switch/timer
     @property
@@ -82,6 +93,9 @@ class WeberCoordinator(DataUpdateCoordinator):
         """Turn monitoring on, arm the auto-off timer, and start polling."""
         self._enabled = True
         self._expiry = time.time() + self._auto_off_minutes * 60
+        # clear freshness so we don't inherit a "live" state from a previous run
+        self._last_rest_ts = 0.0
+        self._last_ws_ts = 0.0
         self.update_interval = timedelta(seconds=DEFAULT_SCAN_INTERVAL)
         await self.async_request_refresh()
 
@@ -130,23 +144,33 @@ class WeberCoordinator(DataUpdateCoordinator):
 
     def _poll(self) -> dict:
         appliance_id = self.appliance["id"]
+        self._poll_count += 1
+        t_start = time.time()
+
         # (re)discover the active session; reset if a new cook started
         session = self.api.latest_session_id(appliance_id)
         if session != self._session:
+            _LOGGER.debug("session changed %s -> %s; resetting paging",
+                          self._session, session)
             self._session = session
             self._after_id = 0
             self._temps = {}
         if not session:
             # no active cook -> hub isn't pushing anything to the cloud
             self._states = {i: DISCONNECTED for i in range(MAX_PROBES)}
+            _LOGGER.debug("poll #%d: no active session -> offline (%.2fs)",
+                          self._poll_count, time.time() - t_start)
             return {
                 "online": False, "session": None, "probes": {},
                 "states": dict(self._states), "connection": OFFLINE, "live": False,
                 "enabled": True, "rest": "no session", "websocket": "idle",
                 "new_snapshots": 0, "last_snapshot_id": self._after_id,
+                "rest_age_s": None, "ws_age_s": None, "poll_seconds": None,
             }
 
+        t_rest = time.time()
         snaps, max_id = self.api.get_snapshots(appliance_id, session, self._after_id)
+        rest_seconds = time.time() - t_rest
         fresh = bool(snaps)  # did the hub write any NEW snapshots since last poll?
         for s in snaps:
             for p in s.get("data", {}).get("probe_status", []):
@@ -161,11 +185,19 @@ class WeberCoordinator(DataUpdateCoordinator):
         # idle/cooking/done. Many hubs never maintain a companion ws session (it
         # returns None/empty), so we must NOT let an absent ws frame mark a probe
         # that is plainly reading a temperature as "disconnected".
-        try:
-            ws = self.api.companion_status(appliance_id, seconds=4.0)
-        except WeberError as e:
-            _LOGGER.debug("companion websocket unavailable: %s", e)
-            ws = None
+        # only pay the ~5 s websocket read when a burst is happening (fresh REST) or
+        # on a periodic safety probe; otherwise skip it so quiet polls are fast.
+        do_ws = fresh or (self._poll_count % WS_PROBE_EVERY == 0)
+        ws = None
+        ws_seconds = 0.0
+        if do_ws:
+            t_ws = time.time()
+            try:
+                ws = self.api.companion_status(appliance_id, seconds=4.0)
+            except WeberError as e:
+                _LOGGER.debug("companion websocket unavailable: %s", e)
+                ws = None
+            ws_seconds = time.time() - t_ws
         ws_ok = bool(ws)
         states = {}
         for i in range(MAX_PROBES):
@@ -177,13 +209,36 @@ class WeberCoordinator(DataUpdateCoordinator):
                 states[i] = DISCONNECTED               # no reading -> unplugged
         self._states = states
 
-        # Hub-level status: prefer the richest live signal we actually observed.
+        # Record per-transport freshness, then derive the connection state from a
+        # GRACE WINDOW rather than this single poll. Both transports arrive in
+        # bursts, so requiring data every 10 s poll produced streaming/polling/stale
+        # flapping (and flapped the probes unavailable). Now: streaming if the ws was
+        # seen recently, else polling if REST was seen recently, else stale.
+        now = time.time()
+        if fresh:
+            self._last_rest_ts = now
         if ws_ok:
+            self._last_ws_ts = now
+        ws_recent = self._last_ws_ts and (now - self._last_ws_ts) <= STALE_GRACE_SECONDS
+        rest_recent = self._last_rest_ts and (now - self._last_rest_ts) <= STALE_GRACE_SECONDS
+        if ws_recent:
             connection = STREAMING
-        elif fresh:
+        elif rest_recent:
             connection = POLLING
         else:
-            connection = STALE                         # session open but data frozen
+            connection = STALE                         # no data within the grace window
+
+        rest_age = round(now - self._last_rest_ts, 1) if self._last_rest_ts else None
+        ws_age = round(now - self._last_ws_ts, 1) if self._last_ws_ts else None
+        poll_seconds = round(now - t_start, 2)
+        _LOGGER.debug(
+            "poll #%d: session=%s new_snaps=%d after_id=%d ws_tried=%s ws_frame=%s "
+            "probes_in_ws=%d rest_age=%ss ws_age=%ss rest_t=%.2fs ws_t=%.2fs "
+            "total=%.2fs -> %s",
+            self._poll_count, (session or "")[:8], len(snaps), self._after_id,
+            do_ws, ws_ok, len(ws or {}), rest_age, ws_age, rest_seconds, ws_seconds,
+            poll_seconds, connection,
+        )
 
         return {
             "online": True,
@@ -198,4 +253,7 @@ class WeberCoordinator(DataUpdateCoordinator):
             "websocket": "streaming" if ws_ok else "idle",
             "new_snapshots": len(snaps),
             "last_snapshot_id": self._after_id,
+            "rest_age_s": rest_age,
+            "ws_age_s": ws_age,
+            "poll_seconds": poll_seconds,
         }

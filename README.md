@@ -46,7 +46,9 @@ hub only pushes to Weber's cloud intermittently, and when it pauses, probe data 
 - **off** — monitoring switch is off (not polling)
 
 Its attributes break out the `rest` and `websocket` transports separately, plus the
-session id and last snapshot id.
+session id, last snapshot id, and diagnostics (`rest_age_seconds`,
+`websocket_age_seconds`, `last_poll_seconds`). The state is debounced over a 60 s
+grace window so brief gaps between the hub's data bursts don't flap it.
 
 > **Probe entities are only available while the connection is `streaming` or
 > `polling`** (live and accurate). In any other state — `stale`, `offline`, or
